@@ -1,5 +1,6 @@
 package br.ifs.cads.api.hotel.service.impl;
 
+import br.ifs.cads.api.hotel.dto.RelatorioReservaPeriodoDto;
 import br.ifs.cads.api.hotel.dto.ReservaDto;
 import br.ifs.cads.api.hotel.entity.Hospede;
 import br.ifs.cads.api.hotel.entity.Quarto;
@@ -207,5 +208,24 @@ public class ReservaServiceImpl implements ReservaService {
         }
         
         return reserva;
+    }
+
+    @Override
+    public List<RelatorioReservaPeriodoDto> relatorioReservasPorPeriodo(LocalDate dataInicio, LocalDate dataFim) {
+        List<Reserva> reservas = reservaRepository.findByDataCheckInBetween(dataInicio, dataFim);
+        
+        return reservas.stream()
+                .map(reserva -> {
+                    RelatorioReservaPeriodoDto dto = new RelatorioReservaPeriodoDto();
+                    dto.setIdReserva(reserva.getId());
+                    dto.setNomeHospede(reserva.getHospede() != null ? reserva.getHospede().getNome() : "N/A");
+                    dto.setCategoriaQuarto(reserva.getQuarto() != null && reserva.getQuarto().getCategoria() != null 
+                            ? reserva.getQuarto().getCategoria().getNome() : "N/A");
+                    dto.setDataInicio(reserva.getDataCheckIn());
+                    dto.setDataFim(reserva.getDataCheckOut());
+                    dto.setStatusReserva(reserva.getStatusReserva().toString());
+                    return dto;
+                })
+                .collect(Collectors.toList());
     }
 }

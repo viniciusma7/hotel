@@ -1,6 +1,7 @@
 package br.ifs.cads.api.hotel.service.impl;
 
 import br.ifs.cads.api.hotel.dto.CancelamentoDto;
+import br.ifs.cads.api.hotel.dto.RelatorioCancelamentoMultaDto;
 import br.ifs.cads.api.hotel.entity.Cancelamento;
 import br.ifs.cads.api.hotel.entity.Reserva;
 import br.ifs.cads.api.hotel.enums.StatusReserva;
@@ -10,10 +11,16 @@ import br.ifs.cads.api.hotel.repository.CancelamentoRepository;
 import br.ifs.cads.api.hotel.repository.ReservaRepository;
 import br.ifs.cads.api.hotel.service.CancelamentoService;
 import org.springframework.beans.factory.annotation.Autowired;
+import org.springframework.data.domain.Page;
+import org.springframework.data.domain.PageImpl;
+import org.springframework.data.domain.Pageable;
 import org.springframework.stereotype.Service;
+import java.time.Duration;
 import java.time.LocalDateTime;
+import java.util.Comparator;
 import java.util.List;
 import java.util.Optional;
+import java.util.stream.Collectors;
 
 @Service
 public class CancelamentoServiceImpl implements CancelamentoService {
@@ -154,5 +161,51 @@ public class CancelamentoServiceImpl implements CancelamentoService {
         }
 
         return cancelamento;
+    }
+
+    @Override
+    public Page<RelatorioCancelamentoMultaDto> relatorioCancelamentosComMulta(LocalDateTime dataInicio, LocalDateTime dataFim, Pageable pageable) {
+        List<Cancelamento> cancelamentos = cancelamentoRepository.findByDataCancelamentoBetween(dataInicio, dataFim);
+        
+        // Filtrar apenas cancelamentos com multa e aplicar regra de 72h
+        List<RelatorioCancelamentoMultaDto> dtos = cancelamentos.stream()
+                .filter(c -> c.getReserva() != null)
+                .map(cancelamento -> {
+                    Reserva reserva = cancelamento.getReserva();
+                    
+                    // Calcular se houve multa (cancelamento com menos de 72h do check-in)
+                    LocalDateTime dataCheckIn = reserva.getDataCheckIn().atStartOfDay();
+                    long horasAntecedencia = Duration.between(cancelamento.getDataCancelamento(), dataCheckIn).toHours();
+                    
+                    Double valorMulta = cancelamento.getValorMulta();
+                    
+                    // Se não há multa registrada mas deveria ter (regra de 72h), calcular
+                    if ((valorMulta == null || valorMulta == 0) && horasAntecedencia < 72) {
+                        // Calcular multa como 30% do valor total da reserva
+                        valorMulta = reserva.getValorTotal() * 0.30;
+                    }
+                    
+                    // Retornar apenas se houver multa
+                    if (valorMulta != null && valorMulta > 0) {
+                        return new RelatorioCancelamentoMultaDto(
+                                reserva.getHospede() != null ? reserva.getHospede().getNome() : "N/A",
+                                reserva.getQuarto() != null && reserva.getQuarto().getCategoria() != null 
+                                        ? reserva.getQuarto().getCategoria().getNome() : "N/A",
+                                cancelamento.getDataCancelamento(),
+                                valorMulta
+                        );
+                    }
+                    return null;
+                })
+                .filter(dto -> dto != null)
+                .sorted(Comparator.comparing(RelatorioCancelamentoMultaDto::getValorMulta).reversed())
+                .collect(Collectors.toList());
+        
+        // Aplicar paginação
+        int start = (int) pageable.getOffset();
+        int end = Math.min((start + pageable.getPageSize()), dtos.size());
+        List<RelatorioCancelamentoMultaDto> paginatedList = dtos.subList(start, end);
+        
+        return new PageImpl<>(paginatedList, pageable, dtos.size());
     }
 }

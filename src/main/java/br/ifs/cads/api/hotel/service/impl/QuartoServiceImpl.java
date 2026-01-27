@@ -1,6 +1,7 @@
 package br.ifs.cads.api.hotel.service.impl;
 
 import br.ifs.cads.api.hotel.dto.QuartoDto;
+import br.ifs.cads.api.hotel.dto.RelatorioOcupacaoQuartoDto;
 import br.ifs.cads.api.hotel.entity.CategoriaQuarto;
 import br.ifs.cads.api.hotel.entity.Quarto;
 import br.ifs.cads.api.hotel.enums.StatusQuarto;
@@ -10,9 +11,13 @@ import br.ifs.cads.api.hotel.repository.CategoriaQuartoRepository;
 import br.ifs.cads.api.hotel.repository.QuartoRepository;
 import br.ifs.cads.api.hotel.service.QuartoService;
 import org.springframework.beans.factory.annotation.Autowired;
+import org.springframework.data.domain.Page;
+import org.springframework.data.domain.PageImpl;
+import org.springframework.data.domain.Pageable;
 import org.springframework.stereotype.Service;
 import org.springframework.transaction.annotation.Transactional;
 
+import java.util.Comparator;
 import java.util.List;
 import java.util.stream.Collectors;
 
@@ -143,6 +148,58 @@ public class QuartoServiceImpl implements QuartoService {
             throw new ResourceNotFoundException("Quarto com ID " + id + " não encontrado");
         }
         quartoRepository.deleteById(id);
+    }
+
+    @Override
+    public Page<RelatorioOcupacaoQuartoDto> relatorioOcupacaoQuartos(Long categoriaId, StatusQuarto status, Pageable pageable) {
+        List<Quarto> quartos;
+        
+        // Filtrar por categoria e status
+        if (categoriaId != null && status != null) {
+            quartos = quartoRepository.findAll().stream()
+                    .filter(q -> q.getCategoria().getId().equals(categoriaId))
+                    .filter(q -> q.getStatus().equals(status))
+                    .collect(Collectors.toList());
+        } else if (categoriaId != null) {
+            quartos = quartoRepository.findAll().stream()
+                    .filter(q -> q.getCategoria().getId().equals(categoriaId))
+                    .collect(Collectors.toList());
+        } else if (status != null) {
+            quartos = quartoRepository.findByStatus(status);
+        } else {
+            quartos = quartoRepository.findAll();
+        }
+        
+        // Converter para DTO
+        List<RelatorioOcupacaoQuartoDto> dtos = quartos.stream()
+                .map(quarto -> new RelatorioOcupacaoQuartoDto(
+                        quarto.getNumeroQuarto(),
+                        quarto.getNumeroBloco(),
+                        quarto.getNumeroAndar(),
+                        quarto.getCategoria() != null ? quarto.getCategoria().getNome() : "N/A",
+                        quarto.getStatus().toString()
+                ))
+                .collect(Collectors.toList());
+        
+        // Ordenar conforme solicitado no Pageable (por bloco ou andar)
+        if (pageable.getSort().isSorted()) {
+            dtos.sort((q1, q2) -> {
+                String sortProperty = pageable.getSort().iterator().next().getProperty();
+                if ("bloco".equals(sortProperty)) {
+                    return q1.getBloco().compareTo(q2.getBloco());
+                } else if ("andar".equals(sortProperty)) {
+                    return q1.getAndar().compareTo(q2.getAndar());
+                }
+                return 0;
+            });
+        }
+        
+        // Aplicar paginação manualmente
+        int start = (int) pageable.getOffset();
+        int end = Math.min((start + pageable.getPageSize()), dtos.size());
+        List<RelatorioOcupacaoQuartoDto> paginatedList = dtos.subList(start, end);
+        
+        return new PageImpl<>(paginatedList, pageable, dtos.size());
     }
 
     private QuartoDto converterParaDto(Quarto quarto) {
