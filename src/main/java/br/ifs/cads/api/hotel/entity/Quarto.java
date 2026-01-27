@@ -2,10 +2,14 @@ package br.ifs.cads.api.hotel.entity;
 
 import br.ifs.cads.api.hotel.enums.StatusQuarto;
 import jakarta.persistence.*;
-import java.util.Objects;
+import lombok.*;
 
 @Entity
 @Table(name = "quartos")
+@Data
+@NoArgsConstructor
+@EqualsAndHashCode(of = "id")
+@ToString(exclude = {"categoria"})
 public class Quarto {
     @Id
     @GeneratedValue(strategy = GenerationType.IDENTITY)
@@ -37,8 +41,6 @@ public class Quarto {
     @Column(name = "ativo", nullable = false)
     private Boolean ativo = true;
 
-    public Quarto() {}
-
     public Quarto(Integer numeroBloco, Integer numeroAndar, Integer numeroQuarto,
                   CategoriaQuarto categoria) {
         this.numeroBloco = numeroBloco;
@@ -47,103 +49,5 @@ public class Quarto {
         this.categoria = categoria;
         this.status = StatusQuarto.DISPONIVEL;
         this.ativo = true;
-    }
-
-    public Long getId() {
-        return id;
-    }
-
-    public void setId(Long id) {
-        this.id = id;
-    }
-
-    public Integer getNumeroBloco() {
-        return numeroBloco;
-    }
-
-    public void setNumeroBloco(Integer numeroBloco) {
-        this.numeroBloco = numeroBloco;
-    }
-
-    public Integer getNumeroAndar() {
-        return numeroAndar;
-    }
-
-    public void setNumeroAndar(Integer numeroAndar) {
-        this.numeroAndar = numeroAndar;
-    }
-
-    public Integer getNumeroQuarto() {
-        return numeroQuarto;
-    }
-
-    public void setNumeroQuarto(Integer numeroQuarto) {
-        this.numeroQuarto = numeroQuarto;
-    }
-
-    public StatusQuarto getStatus() {
-        return status;
-    }
-
-    public void setStatus(StatusQuarto status) {
-        this.status = status;
-    }
-
-    public CategoriaQuarto getCategoria() {
-        return categoria;
-    }
-
-    public void setCategoria(CategoriaQuarto categoria) {
-        this.categoria = categoria;
-    }
-
-    public Integer getNumeroCamasCasal() {
-        return numeroCamasCasal;
-    }
-
-    public void setNumeroCamasCasal(Integer numeroCamasCasal) {
-        this.numeroCamasCasal = numeroCamasCasal;
-    }
-
-    public Integer getNumeroCamasSolteiro() {
-        return numeroCamasSolteiro;
-    }
-
-    public void setNumeroCamasSolteiro(Integer numeroCamasSolteiro) {
-        this.numeroCamasSolteiro = numeroCamasSolteiro;
-    }
-
-    public Boolean getAtivo() {
-        return ativo;
-    }
-
-    public void setAtivo(Boolean ativo) {
-        this.ativo = ativo;
-    }
-
-    @Override
-    public boolean equals(Object o) {
-        if (this == o) return true;
-        if (o == null || getClass() != o.getClass()) return false;
-        Quarto quarto = (Quarto) o;
-        return Objects.equals(id, quarto.id);
-    }
-
-    @Override
-    public int hashCode() {
-        return Objects.hash(id);
-    }
-
-    @Override
-    public String toString() {
-        return "Quarto{" +
-                "id=" + id +
-                ", numeroBloco=" + numeroBloco +
-                ", numeroAndar=" + numeroAndar +
-                ", numeroQuarto=" + numeroQuarto +
-                ", status=" + status +
-                ", categoria=" + categoria +
-                ", ativo=" + ativo +
-                '}';
     }
 }
