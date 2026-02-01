@@ -1,6 +1,7 @@
 package br.ifs.cads.api.hotel.service;
 
 import br.ifs.cads.api.hotel.dto.HospedeDto;
+import br.ifs.cads.api.hotel.dto.RelatorioHospedeAtivoDto;
 
 import java.util.List;
 
@@ -18,4 +19,7 @@ public interface HospedeService {
     void deletar(Long id);
     void associarUsuario(Long hospedeId, Long usuarioId);
     void desassociarUsuario(Long hospedeId);
+
+    // UC-04: Relatório de Hóspedes Ativos
+    List<RelatorioHospedeAtivoDto> relatorioHospedesAtivos();
 }

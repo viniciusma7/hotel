@@ -1,5 +1,6 @@
 package br.ifs.cads.api.hotel.entity;
 
+import br.ifs.cads.api.hotel.enums.FormaPagamento;
 import br.ifs.cads.api.hotel.enums.StatusReserva;
 import jakarta.persistence.*;
 import lombok.*;
@@ -38,6 +39,10 @@ public class Reserva {
     @Column(name = "status_reserva", nullable = false)
     private StatusReserva statusReserva = StatusReserva.PENDENTE;
 
+    @Enumerated(EnumType.STRING)
+    @Column(name = "forma_pagamento", nullable = false)
+    private FormaPagamento formaPagamento;
+
     @Column(name = "valor_total", nullable = false)
     private Double valorTotal;
 
@@ -48,20 +53,21 @@ public class Reserva {
     private Boolean ativo = true;
 
     public Reserva(Hospede hospede, Quarto quarto, LocalDateTime dataReserva,
-                   LocalDate dataCheckIn, LocalDate dataCheckOut, Double valorTotal) {
+                   LocalDate dataCheckIn, LocalDate dataCheckOut, Double valorTotal, FormaPagamento formaPagamento) {
         this.hospede = hospede;
         this.quarto = quarto;
         this.dataReserva = dataReserva;
         this.dataCheckIn = dataCheckIn;
         this.dataCheckOut = dataCheckOut;
         this.valorTotal = valorTotal;
+        this.formaPagamento = formaPagamento;
         this.statusReserva = StatusReserva.PENDENTE;
         this.ativo = true;
     }
 
     public Reserva(Hospede hospede, Quarto quarto, LocalDateTime dataReserva,
                    LocalDate dataCheckIn, LocalDate dataCheckOut, Double valorTotal,
-                   String observacoes) {
+                   String observacoes, FormaPagamento formaPagamento) {
         this.hospede = hospede;
         this.quarto = quarto;
         this.dataReserva = dataReserva;
@@ -69,6 +75,7 @@ public class Reserva {
         this.dataCheckOut = dataCheckOut;
         this.valorTotal = valorTotal;
         this.observacoes = observacoes;
+        this.formaPagamento = formaPagamento;
         this.statusReserva = StatusReserva.PENDENTE;
         this.ativo = true;
     }

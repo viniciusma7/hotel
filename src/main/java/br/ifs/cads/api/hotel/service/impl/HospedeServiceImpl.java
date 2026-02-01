@@ -1,6 +1,7 @@
 package br.ifs.cads.api.hotel.service.impl;
 
 import br.ifs.cads.api.hotel.dto.HospedeDto;
+import br.ifs.cads.api.hotel.dto.RelatorioHospedeAtivoDto;
 import br.ifs.cads.api.hotel.entity.Cidade;
 import br.ifs.cads.api.hotel.entity.Hospede;
 import br.ifs.cads.api.hotel.entity.Usuario;
@@ -94,6 +95,22 @@ public class HospedeServiceImpl implements HospedeService {
                 .map(this::converterParaDto)
                 .collect(Collectors.toList());
     }
+
+        @Override
+        @Transactional(readOnly = true)
+        public List<RelatorioHospedeAtivoDto> relatorioHospedesAtivos() {
+        return hospedeRepository.findByAtivo(true)
+            .stream()
+            .filter(h -> h.getUsuario() != null && Boolean.TRUE.equals(h.getUsuario().getAtivo()))
+            .map(h -> new RelatorioHospedeAtivoDto(
+                h.getNome(),
+                h.getUsuario().getEmail(),
+                h.getTelefone(),
+                h.getCidade() != null ? h.getCidade().getNome() : null,
+                h.getCidade() != null && h.getCidade().getEstado() != null ? h.getCidade().getEstado().getUf() : null
+            ))
+            .collect(Collectors.toList());
+        }
 
     @Override
     @Transactional(readOnly = true)

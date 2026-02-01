@@ -1,10 +1,15 @@
 package br.ifs.cads.api.hotel.controller;
 
 import br.ifs.cads.api.hotel.dto.RelatorioCancelamentoMultaDto;
+import br.ifs.cads.api.hotel.dto.RelatorioFaturamentoDto;
+import br.ifs.cads.api.hotel.dto.RelatorioHospedeAtivoDto;
 import br.ifs.cads.api.hotel.dto.RelatorioOcupacaoQuartoDto;
+import br.ifs.cads.api.hotel.dto.RelatorioReservaFormaPagamentoDto;
 import br.ifs.cads.api.hotel.dto.RelatorioReservaPeriodoDto;
+import br.ifs.cads.api.hotel.enums.FormaPagamento;
 import br.ifs.cads.api.hotel.enums.StatusQuarto;
 import br.ifs.cads.api.hotel.service.CancelamentoService;
+import br.ifs.cads.api.hotel.service.HospedeService;
 import br.ifs.cads.api.hotel.service.QuartoService;
 import br.ifs.cads.api.hotel.service.ReservaService;
 import org.springframework.beans.factory.annotation.Autowired;
@@ -33,6 +38,9 @@ public class RelatorioController {
 
     @Autowired
     private CancelamentoService cancelamentoService;
+
+    @Autowired
+    private HospedeService hospedeService;
 
     /**
      * UC-01: Relatório de Reservas por Período
@@ -94,6 +102,57 @@ public class RelatorioController {
         Pageable pageable = PageRequest.of(page, size);
         
         Page<RelatorioCancelamentoMultaDto> relatorio = cancelamentoService.relatorioCancelamentosComMulta(dataInicio, dataFim, pageable);
+        return ResponseEntity.ok(relatorio);
+    }
+
+    /**
+     * UC-04: Relatório de Hóspedes Ativos
+     *
+     * @return Lista de hóspedes com usuário ativo, sem exposição de senha
+     */
+    @GetMapping("/hospedes-ativos")
+    public ResponseEntity<List<RelatorioHospedeAtivoDto>> relatorioHospedesAtivos() {
+        List<RelatorioHospedeAtivoDto> relatorio = hospedeService.relatorioHospedesAtivos();
+        return ResponseEntity.ok(relatorio);
+    }
+
+    /**
+     * UC-05: Relatório de Reservas por Forma de Pagamento
+     *
+     * @param formaPagamento Forma de pagamento (opcional)
+     * @param dataInicio Data inicial do período
+     * @param dataFim Data final do período
+     * @param page Número da página (padrão: 0)
+     * @param size Tamanho da página (padrão: 10)
+     * @return Página com agregação por forma de pagamento, ordenada por valor total
+     */
+    @GetMapping("/reservas-forma-pagamento")
+    public ResponseEntity<Page<RelatorioReservaFormaPagamentoDto>> relatorioReservasPorFormaPagamento(
+            @RequestParam(required = false) FormaPagamento formaPagamento,
+            @RequestParam @DateTimeFormat(iso = DateTimeFormat.ISO.DATE) LocalDate dataInicio,
+            @RequestParam @DateTimeFormat(iso = DateTimeFormat.ISO.DATE) LocalDate dataFim,
+            @RequestParam(defaultValue = "0") int page,
+            @RequestParam(defaultValue = "10") int size) {
+
+        Pageable pageable = PageRequest.of(page, size);
+        Page<RelatorioReservaFormaPagamentoDto> relatorio =
+                reservaService.relatorioReservasPorFormaPagamento(formaPagamento, dataInicio, dataFim, pageable);
+        return ResponseEntity.ok(relatorio);
+    }
+
+    /**
+     * UC-06: Relatório Financeiro de Faturamento
+     *
+     * @param dataInicio Data inicial do período
+     * @param dataFim Data final do período
+     * @return Totais bruto, descontos e líquido do período
+     */
+    @GetMapping("/faturamento")
+    public ResponseEntity<RelatorioFaturamentoDto> relatorioFaturamento(
+            @RequestParam @DateTimeFormat(iso = DateTimeFormat.ISO.DATE) LocalDate dataInicio,
+            @RequestParam @DateTimeFormat(iso = DateTimeFormat.ISO.DATE) LocalDate dataFim) {
+
+        RelatorioFaturamentoDto relatorio = reservaService.relatorioFaturamento(dataInicio, dataFim);
         return ResponseEntity.ok(relatorio);
     }
 }

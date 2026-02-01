@@ -20,6 +20,7 @@ public class ReservaDto {
     private LocalDate dataCheckIn;
     private LocalDate dataCheckOut;
     private String statusReserva;
+    private String formaPagamento;
     private Double valorTotal;
     private String observacoes;
     private Boolean ativo;

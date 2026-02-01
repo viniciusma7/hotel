@@ -1,9 +1,14 @@
 package br.ifs.cads.api.hotel.service;
 
+import br.ifs.cads.api.hotel.dto.RelatorioReservaFormaPagamentoDto;
 import br.ifs.cads.api.hotel.dto.RelatorioReservaPeriodoDto;
+import br.ifs.cads.api.hotel.dto.RelatorioFaturamentoDto;
 import br.ifs.cads.api.hotel.dto.ReservaDto;
 import br.ifs.cads.api.hotel.entity.Reserva;
+import br.ifs.cads.api.hotel.enums.FormaPagamento;
 import br.ifs.cads.api.hotel.enums.StatusReserva;
+import org.springframework.data.domain.Page;
+import org.springframework.data.domain.Pageable;
 import java.time.LocalDate;
 import java.util.List;
 import java.util.Optional;
@@ -25,4 +30,13 @@ public interface ReservaService {
     
     // UC-01: Relatório de Reservas por Período
     List<RelatorioReservaPeriodoDto> relatorioReservasPorPeriodo(LocalDate dataInicio, LocalDate dataFim);
+
+    // UC-05: Relatório de Reservas por Forma de Pagamento
+    Page<RelatorioReservaFormaPagamentoDto> relatorioReservasPorFormaPagamento(FormaPagamento formaPagamento,
+                                                                               LocalDate dataInicio,
+                                                                               LocalDate dataFim,
+                                                                               Pageable pageable);
+
+    // UC-06: Relatório Financeiro de Faturamento
+    RelatorioFaturamentoDto relatorioFaturamento(LocalDate dataInicio, LocalDate dataFim);
 }

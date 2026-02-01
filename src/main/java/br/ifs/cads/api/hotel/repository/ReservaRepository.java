@@ -15,6 +15,7 @@ public interface ReservaRepository extends JpaRepository<Reserva, Long> {
     List<Reserva> findByAtivo(Boolean ativo);
     List<Reserva> findByDataCheckInBetween(LocalDate dataInicio, LocalDate dataFim);
     List<Reserva> findByDataCheckOutBetween(LocalDate dataInicio, LocalDate dataFim);
+    List<Reserva> findByStatusReservaAndDataCheckOutBetween(StatusReserva statusReserva, LocalDate dataInicio, LocalDate dataFim);
     List<Reserva> findByHospedeIdAndStatusReserva(Long hospedeId, StatusReserva statusReserva);
     List<Reserva> findByQuartoIdAndStatusReserva(Long quartoId, StatusReserva statusReserva);
 }

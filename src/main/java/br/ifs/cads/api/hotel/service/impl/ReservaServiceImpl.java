@@ -1,10 +1,13 @@
 package br.ifs.cads.api.hotel.service.impl;
 
+import br.ifs.cads.api.hotel.dto.RelatorioFaturamentoDto;
+import br.ifs.cads.api.hotel.dto.RelatorioReservaFormaPagamentoDto;
 import br.ifs.cads.api.hotel.dto.RelatorioReservaPeriodoDto;
 import br.ifs.cads.api.hotel.dto.ReservaDto;
 import br.ifs.cads.api.hotel.entity.Hospede;
 import br.ifs.cads.api.hotel.entity.Quarto;
 import br.ifs.cads.api.hotel.entity.Reserva;
+import br.ifs.cads.api.hotel.enums.FormaPagamento;
 import br.ifs.cads.api.hotel.enums.StatusReserva;
 import br.ifs.cads.api.hotel.exception.BusinessRuleException;
 import br.ifs.cads.api.hotel.exception.ResourceNotFoundException;
@@ -13,10 +16,16 @@ import br.ifs.cads.api.hotel.repository.QuartoRepository;
 import br.ifs.cads.api.hotel.repository.ReservaRepository;
 import br.ifs.cads.api.hotel.service.ReservaService;
 import org.springframework.beans.factory.annotation.Autowired;
+import org.springframework.data.domain.Page;
+import org.springframework.data.domain.PageImpl;
+import org.springframework.data.domain.Pageable;
 import org.springframework.stereotype.Service;
 import java.time.LocalDate;
 import java.time.LocalDateTime;
+import java.time.temporal.ChronoUnit;
+import java.util.Comparator;
 import java.util.List;
+import java.util.Map;
 import java.util.Optional;
 import java.util.stream.Collectors;
 
@@ -54,6 +63,9 @@ public class ReservaServiceImpl implements ReservaService {
         }
         if (reserva.getValorTotal() == null || reserva.getValorTotal() <= 0) {
             throw new BusinessRuleException("Valor total da reserva deve ser maior que zero");
+        }
+        if (reserva.getFormaPagamento() == null) {
+            throw new BusinessRuleException("Forma de pagamento é obrigatória");
         }
 
         // Verificar hóspede
@@ -157,6 +169,7 @@ public class ReservaServiceImpl implements ReservaService {
         dto.setDataCheckIn(reserva.getDataCheckIn());
         dto.setDataCheckOut(reserva.getDataCheckOut());
         dto.setStatusReserva(reserva.getStatusReserva().toString());
+        dto.setFormaPagamento(reserva.getFormaPagamento() != null ? reserva.getFormaPagamento().toString() : null);
         dto.setValorTotal(reserva.getValorTotal());
         dto.setObservacoes(reserva.getObservacoes());
         dto.setAtivo(reserva.getAtivo());
@@ -194,6 +207,14 @@ public class ReservaServiceImpl implements ReservaService {
                 reserva.setStatusReserva(StatusReserva.PENDENTE);
             }
         }
+
+        if (dto.getFormaPagamento() != null) {
+            try {
+                reserva.setFormaPagamento(FormaPagamento.valueOf(dto.getFormaPagamento().toUpperCase()));
+            } catch (IllegalArgumentException e) {
+                throw new BusinessRuleException("Forma de pagamento inválida: " + dto.getFormaPagamento());
+            }
+        }
         
         if (dto.getHospedeId() != null) {
             Hospede hospede = new Hospede();
@@ -227,5 +248,114 @@ public class ReservaServiceImpl implements ReservaService {
                     return dto;
                 })
                 .collect(Collectors.toList());
+    }
+
+    @Override
+    public Page<RelatorioReservaFormaPagamentoDto> relatorioReservasPorFormaPagamento(FormaPagamento formaPagamento,
+                                                                                      LocalDate dataInicio,
+                                                                                      LocalDate dataFim,
+                                                                                      Pageable pageable) {
+        // Buscar reservas com CHECKOUT no período
+        List<Reserva> reservas = reservaRepository
+                .findByStatusReservaAndDataCheckOutBetween(StatusReserva.CHECKOUT, dataInicio, dataFim);
+
+        // Filtrar por forma de pagamento se informado
+        if (formaPagamento != null) {
+            reservas = reservas.stream()
+                    .filter(r -> formaPagamento.equals(r.getFormaPagamento()))
+                    .collect(Collectors.toList());
+        }
+
+        // Agrupar por forma de pagamento e somar valores
+        Map<FormaPagamento, List<Reserva>> agrupado = reservas.stream()
+                .filter(r -> r.getFormaPagamento() != null)
+                .collect(Collectors.groupingBy(Reserva::getFormaPagamento));
+
+        List<RelatorioReservaFormaPagamentoDto> dtos = agrupado.entrySet().stream()
+                .map(entry -> {
+                    FormaPagamento fp = entry.getKey();
+                    List<Reserva> rs = entry.getValue();
+                    long quantidade = rs.size();
+                    double total = rs.stream()
+                            .map(Reserva::getValorTotal)
+                            .filter(v -> v != null)
+                            .mapToDouble(Double::doubleValue)
+                            .sum();
+                    return new RelatorioReservaFormaPagamentoDto(fp, quantidade, total);
+                })
+                // Ordenar por valor total recebido (desc)
+                .sorted(Comparator.comparing(RelatorioReservaFormaPagamentoDto::getValorTotalRecebido).reversed())
+                .collect(Collectors.toList());
+
+        // Paginação manual
+        int start = (int) pageable.getOffset();
+        int end = Math.min(start + pageable.getPageSize(), dtos.size());
+        List<RelatorioReservaFormaPagamentoDto> pagina = start <= end ? dtos.subList(start, end) : List.of();
+
+        return new PageImpl<>(pagina, pageable, dtos.size());
+    }
+
+    @Override
+    public RelatorioFaturamentoDto relatorioFaturamento(LocalDate dataInicio, LocalDate dataFim) {
+        // Faturamento considera reservas no período (data de check-out) e ignora canceladas
+        List<Reserva> reservasPeriodo = reservaRepository.findByDataCheckOutBetween(dataInicio, dataFim)
+                .stream()
+                .filter(r -> r.getStatusReserva() != StatusReserva.CANCELADO)
+                .collect(Collectors.toList());
+
+        double totalBrutoReservas = reservasPeriodo.stream()
+                .map(Reserva::getValorTotal)
+                .filter(v -> v != null)
+                .mapToDouble(Double::doubleValue)
+                .sum();
+
+        // Desconto de 20% para diárias de segunda a quinta
+        double totalDescontos = reservasPeriodo.stream()
+                .mapToDouble(reserva -> calcularDescontoReserva(reserva))
+                .sum();
+
+        double totalLiquidoReservas = totalBrutoReservas - totalDescontos;
+
+        // Multas de cancelamento entram como receita - cálculo no CancelamentoService já existente
+        // Aqui apenas poderíamos somar se houvesse integração direta; para manter a separação,
+        // consideramos que o faturamento de multas é tratado em relatório específico (UC-03).
+        // Caso queira incluir multas aqui, seria necessário injetar CancelamentoRepository/Service
+        // e somar as multas do período.
+
+        double totalBruto = totalBrutoReservas;
+        double totalLiquido = totalLiquidoReservas;
+
+        return new RelatorioFaturamentoDto(totalBruto, totalDescontos, totalLiquido);
+    }
+
+    private double calcularDescontoReserva(Reserva reserva) {
+        if (reserva.getDataCheckIn() == null || reserva.getDataCheckOut() == null || reserva.getValorTotal() == null) {
+            return 0.0;
+        }
+
+        long dias = ChronoUnit.DAYS.between(reserva.getDataCheckIn(), reserva.getDataCheckOut());
+        if (dias <= 0) {
+            return 0.0;
+        }
+
+        double valorDiaria = reserva.getValorTotal() / dias;
+        double descontoTotal = 0.0;
+
+        LocalDate data = reserva.getDataCheckIn();
+        for (int i = 0; i < dias; i++) {
+            switch (data.getDayOfWeek()) {
+                case MONDAY:
+                case TUESDAY:
+                case WEDNESDAY:
+                case THURSDAY:
+                    descontoTotal += valorDiaria * 0.20;
+                    break;
+                default:
+                    break;
+            }
+            data = data.plusDays(1);
+        }
+
+        return descontoTotal;
     }
 }
