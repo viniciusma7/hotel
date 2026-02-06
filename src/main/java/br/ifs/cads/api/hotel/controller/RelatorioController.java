@@ -2,10 +2,13 @@ package br.ifs.cads.api.hotel.controller;
 
 import br.ifs.cads.api.hotel.dto.RelatorioCancelamentoMultaDto;
 import br.ifs.cads.api.hotel.dto.RelatorioFaturamentoDto;
+import br.ifs.cads.api.hotel.dto.RelatorioGerencialCompletoDto;
+import br.ifs.cads.api.hotel.dto.RelatorioHistoricoHospedeDto;
 import br.ifs.cads.api.hotel.dto.RelatorioHospedeAtivoDto;
 import br.ifs.cads.api.hotel.dto.RelatorioOcupacaoQuartoDto;
 import br.ifs.cads.api.hotel.dto.RelatorioReservaFormaPagamentoDto;
 import br.ifs.cads.api.hotel.dto.RelatorioReservaPeriodoDto;
+import br.ifs.cads.api.hotel.dto.RelatorioUtilizacaoCategoriaDto;
 import br.ifs.cads.api.hotel.enums.FormaPagamento;
 import br.ifs.cads.api.hotel.enums.StatusQuarto;
 import br.ifs.cads.api.hotel.service.CancelamentoService;
@@ -153,6 +156,64 @@ public class RelatorioController {
             @RequestParam @DateTimeFormat(iso = DateTimeFormat.ISO.DATE) LocalDate dataFim) {
 
         RelatorioFaturamentoDto relatorio = reservaService.relatorioFaturamento(dataInicio, dataFim);
+        return ResponseEntity.ok(relatorio);
+    }
+
+    /**
+     * UC-07: Relatório de Histórico Completo do Hóspede
+     *
+     * @param hospedeId ID do hóspede
+     * @param page Número da página (padrão: 0)
+     * @param size Tamanho da página (padrão: 10)
+     * @return Página com histórico de reservas do hóspede, ordenadas por data (desc)
+     */
+    @GetMapping("/historico-hospede/{hospedeId}")
+    public ResponseEntity<Page<RelatorioHistoricoHospedeDto>> relatorioHistoricoHospede(
+            @PathVariable Long hospedeId,
+            @RequestParam(defaultValue = "0") int page,
+            @RequestParam(defaultValue = "10") int size) {
+
+        Pageable pageable = PageRequest.of(page, size);
+        Page<RelatorioHistoricoHospedeDto> relatorio = reservaService.relatorioHistoricoHospede(hospedeId, pageable);
+        return ResponseEntity.ok(relatorio);
+    }
+
+    /**
+     * UC-08: Relatório de Utilização de Categorias
+     *
+     * @param dataInicio Data inicial do período
+     * @param dataFim Data final do período
+     * @return Lista com utilização das categorias de quarto no período
+     */
+    @GetMapping("/utilizacao-categorias")
+    public ResponseEntity<List<RelatorioUtilizacaoCategoriaDto>> relatorioUtilizacaoCategorias(
+            @RequestParam @DateTimeFormat(iso = DateTimeFormat.ISO.DATE) LocalDate dataInicio,
+            @RequestParam @DateTimeFormat(iso = DateTimeFormat.ISO.DATE) LocalDate dataFim) {
+
+        List<RelatorioUtilizacaoCategoriaDto> relatorio =
+                reservaService.relatorioUtilizacaoCategorias(dataInicio, dataFim);
+        return ResponseEntity.ok(relatorio);
+    }
+
+    /**
+     * UC-09: Relatório Gerencial Completo
+     *
+     * @param dataInicio Data inicial do período
+     * @param dataFim Data final do período
+     * @param pageCategorias Página da seção de categorias mais rentáveis (padrão: 0)
+     * @param sizeCategorias Tamanho da página de categorias mais rentáveis (padrão: 10)
+     * @return Relatório consolidado com indicadores gerenciais
+     */
+    @GetMapping("/gerencial-completo")
+    public ResponseEntity<RelatorioGerencialCompletoDto> relatorioGerencialCompleto(
+            @RequestParam @DateTimeFormat(iso = DateTimeFormat.ISO.DATE) LocalDate dataInicio,
+            @RequestParam @DateTimeFormat(iso = DateTimeFormat.ISO.DATE) LocalDate dataFim,
+            @RequestParam(defaultValue = "0") int pageCategorias,
+            @RequestParam(defaultValue = "10") int sizeCategorias) {
+
+        Pageable pageableCategorias = PageRequest.of(pageCategorias, sizeCategorias);
+        RelatorioGerencialCompletoDto relatorio =
+                reservaService.relatorioGerencialCompleto(dataInicio, dataFim, pageableCategorias);
         return ResponseEntity.ok(relatorio);
     }
 }

@@ -1,9 +1,6 @@
 package br.ifs.cads.api.hotel.service.impl;
 
-import br.ifs.cads.api.hotel.dto.RelatorioFaturamentoDto;
-import br.ifs.cads.api.hotel.dto.RelatorioReservaFormaPagamentoDto;
-import br.ifs.cads.api.hotel.dto.RelatorioReservaPeriodoDto;
-import br.ifs.cads.api.hotel.dto.ReservaDto;
+import br.ifs.cads.api.hotel.dto.*;
 import br.ifs.cads.api.hotel.entity.Hospede;
 import br.ifs.cads.api.hotel.entity.Quarto;
 import br.ifs.cads.api.hotel.entity.Reserva;
@@ -11,9 +8,11 @@ import br.ifs.cads.api.hotel.enums.FormaPagamento;
 import br.ifs.cads.api.hotel.enums.StatusReserva;
 import br.ifs.cads.api.hotel.exception.BusinessRuleException;
 import br.ifs.cads.api.hotel.exception.ResourceNotFoundException;
+import br.ifs.cads.api.hotel.entity.Cancelamento;
 import br.ifs.cads.api.hotel.repository.HospedeRepository;
 import br.ifs.cads.api.hotel.repository.QuartoRepository;
 import br.ifs.cads.api.hotel.repository.ReservaRepository;
+import br.ifs.cads.api.hotel.repository.CancelamentoRepository;
 import br.ifs.cads.api.hotel.service.ReservaService;
 import org.springframework.beans.factory.annotation.Autowired;
 import org.springframework.data.domain.Page;
@@ -40,6 +39,9 @@ public class ReservaServiceImpl implements ReservaService {
 
     @Autowired
     private QuartoRepository quartoRepository;
+
+    @Autowired
+    private CancelamentoRepository cancelamentoRepository;
 
     @Override
     public Reserva save(Reserva reserva) {
@@ -328,6 +330,148 @@ public class ReservaServiceImpl implements ReservaService {
         return new RelatorioFaturamentoDto(totalBruto, totalDescontos, totalLiquido);
     }
 
+        // UC-07: Relatório de Histórico Completo do Hóspede
+        @Override
+        public Page<RelatorioHistoricoHospedeDto> relatorioHistoricoHospede(Long hospedeId, Pageable pageable) {
+        if (!hospedeRepository.existsById(hospedeId)) {
+            throw new ResourceNotFoundException("Hóspede com ID " + hospedeId + " não encontrado");
+        }
+
+        List<Reserva> reservas = reservaRepository.findByHospedeId(hospedeId);
+
+        List<RelatorioHistoricoHospedeDto> dtos = reservas.stream()
+            .sorted(Comparator.comparing(Reserva::getDataCheckIn).reversed())
+            .map(reserva -> {
+                RelatorioHistoricoHospedeDto dto = new RelatorioHistoricoHospedeDto();
+                dto.setIdReserva(reserva.getId());
+                dto.setDataCheckIn(reserva.getDataCheckIn());
+                dto.setDataCheckOut(reserva.getDataCheckOut());
+                dto.setCategoriaQuarto(reserva.getQuarto() != null && reserva.getQuarto().getCategoria() != null
+                    ? reserva.getQuarto().getCategoria().getNome() : "N/A");
+                dto.setStatusReserva(reserva.getStatusReserva() != null ? reserva.getStatusReserva().toString() : null);
+                dto.setValorPago(reserva.getValorTotal());
+                return dto;
+            })
+            .collect(Collectors.toList());
+
+        int start = (int) pageable.getOffset();
+        int end = Math.min(start + pageable.getPageSize(), dtos.size());
+        List<RelatorioHistoricoHospedeDto> pagina = start <= end ? dtos.subList(start, end) : List.of();
+
+        return new PageImpl<>(pagina, pageable, dtos.size());
+        }
+
+        // UC-08: Relatório de Utilização de Categorias
+        @Override
+        public List<RelatorioUtilizacaoCategoriaDto> relatorioUtilizacaoCategorias(LocalDate dataInicio, LocalDate dataFim) {
+        List<Reserva> reservas = reservaRepository
+            .findByStatusReservaAndDataCheckOutBetween(StatusReserva.CHECKOUT, dataInicio, dataFim)
+            .stream()
+            .filter(reserva -> reserva.getQuarto() != null
+                && reserva.getQuarto().getCategoria() != null)
+            .collect(Collectors.toList());
+
+        long totalReservasGeral = reservas.size();
+
+        Map<String, List<Reserva>> agrupadoPorCategoria = reservas.stream()
+            .collect(Collectors.groupingBy(r -> r.getQuarto().getCategoria().getNome()));
+
+        return agrupadoPorCategoria.entrySet().stream()
+            .map(entry -> {
+                String categoria = entry.getKey();
+                long totalReservas = entry.getValue().size();
+                double taxaOcupacao = totalReservasGeral > 0
+                    ? (totalReservas * 100.0) / totalReservasGeral
+                    : 0.0;
+                return new RelatorioUtilizacaoCategoriaDto(categoria, totalReservas, taxaOcupacao);
+            })
+            .sorted(Comparator.comparing(RelatorioUtilizacaoCategoriaDto::getTotalReservas).reversed())
+            .collect(Collectors.toList());
+        }
+
+        // UC-09: Relatório Gerencial Completo
+        @Override
+        public RelatorioGerencialCompletoDto relatorioGerencialCompleto(LocalDate dataInicio,
+                                        LocalDate dataFim,
+                                        Pageable pageableCategorias) {
+        // Total de reservas no período (considerando data de check-in)
+        List<Reserva> reservasPeriodoCheckIn = reservaRepository.findByDataCheckInBetween(dataInicio, dataFim);
+        long totalReservas = reservasPeriodoCheckIn.size();
+
+        // Total de cancelamentos no período (data de cancelamento)
+        LocalDateTime inicioPeriodo = dataInicio.atStartOfDay();
+        LocalDateTime fimPeriodo = dataFim.plusDays(1).atStartOfDay().minusNanos(1);
+        List<Cancelamento> cancelamentosPeriodo = cancelamentoRepository
+            .findByDataCancelamentoBetween(inicioPeriodo, fimPeriodo);
+        long totalCancelamentos = cancelamentosPeriodo.size();
+
+        // Faturamento reutilizando regra de negócio existente
+        RelatorioFaturamentoDto faturamento = relatorioFaturamento(dataInicio, dataFim);
+
+        // Ocupação média no período
+        List<Reserva> reservasCheckoutPeriodo = reservaRepository
+            .findByStatusReservaAndDataCheckOutBetween(StatusReserva.CHECKOUT, dataInicio, dataFim);
+
+        long diasPeriodo = ChronoUnit.DAYS.between(dataInicio, dataFim) + 1;
+        double ocupacaoMediaPercentual = 0.0;
+
+        List<Quarto> quartosAtivos = quartoRepository.findByAtivo(true);
+        long quantidadeQuartosAtivos = quartosAtivos.size();
+
+        if (diasPeriodo > 0 && quantidadeQuartosAtivos > 0) {
+            long capacidadeTotalDiarias = diasPeriodo * quantidadeQuartosAtivos;
+
+            long diariasReservadas = reservasCheckoutPeriodo.stream()
+                .mapToLong(reserva -> calcularDiariasNoPeriodo(reserva, dataInicio, dataFim))
+                .sum();
+
+            ocupacaoMediaPercentual = capacidadeTotalDiarias > 0
+                ? (diariasReservadas * 100.0) / capacidadeTotalDiarias
+                : 0.0;
+        }
+
+        // Categorias mais rentáveis (paginadas)
+        Map<String, List<Reserva>> reservasPorCategoria = reservasCheckoutPeriodo.stream()
+            .filter(reserva -> reserva.getQuarto() != null
+                && reserva.getQuarto().getCategoria() != null)
+            .collect(Collectors.groupingBy(r -> r.getQuarto().getCategoria().getNome()));
+
+        List<RelatorioCategoriaRentabilidadeDto> categorias = reservasPorCategoria.entrySet().stream()
+            .map(entry -> {
+                String categoria = entry.getKey();
+                List<Reserva> rs = entry.getValue();
+                long totalReservasCategoria = rs.size();
+                double totalFaturado = rs.stream()
+                    .map(Reserva::getValorTotal)
+                    .filter(v -> v != null)
+                    .mapToDouble(Double::doubleValue)
+                    .sum();
+                return new RelatorioCategoriaRentabilidadeDto(categoria, totalReservasCategoria, totalFaturado);
+            })
+            .sorted(Comparator.comparing(RelatorioCategoriaRentabilidadeDto::getTotalFaturado).reversed())
+            .collect(Collectors.toList());
+
+        int start = (int) pageableCategorias.getOffset();
+        int end = Math.min(start + pageableCategorias.getPageSize(), categorias.size());
+        List<RelatorioCategoriaRentabilidadeDto> paginaCategorias = start <= end
+            ? categorias.subList(start, end)
+            : List.of();
+
+        Page<RelatorioCategoriaRentabilidadeDto> pageCategorias = new PageImpl<>(
+            paginaCategorias,
+            pageableCategorias,
+            categorias.size());
+
+        RelatorioGerencialCompletoDto dto = new RelatorioGerencialCompletoDto();
+        dto.setTotalReservas(totalReservas);
+        dto.setTotalCancelamentos(totalCancelamentos);
+        dto.setFaturamento(faturamento);
+        dto.setOcupacaoMediaPercentual(ocupacaoMediaPercentual);
+        dto.setCategoriasMaisRentaveis(pageCategorias);
+
+        return dto;
+        }
+
     private double calcularDescontoReserva(Reserva reserva) {
         if (reserva.getDataCheckIn() == null || reserva.getDataCheckOut() == null || reserva.getValorTotal() == null) {
             return 0.0;
@@ -357,5 +501,20 @@ public class ReservaServiceImpl implements ReservaService {
         }
 
         return descontoTotal;
+    }
+
+    private long calcularDiariasNoPeriodo(Reserva reserva, LocalDate dataInicio, LocalDate dataFim) {
+        if (reserva.getDataCheckIn() == null || reserva.getDataCheckOut() == null) {
+            return 0L;
+        }
+
+        LocalDate inicioReserva = reserva.getDataCheckIn();
+        LocalDate fimReserva = reserva.getDataCheckOut();
+
+        LocalDate inicio = inicioReserva.isAfter(dataInicio) ? inicioReserva : dataInicio;
+        LocalDate fim = fimReserva.isBefore(dataFim) ? fimReserva : dataFim;
+
+        long dias = ChronoUnit.DAYS.between(inicio, fim);
+        return Math.max(dias, 0L);
     }
 }

@@ -1,9 +1,6 @@
 package br.ifs.cads.api.hotel.service;
 
-import br.ifs.cads.api.hotel.dto.RelatorioReservaFormaPagamentoDto;
-import br.ifs.cads.api.hotel.dto.RelatorioReservaPeriodoDto;
-import br.ifs.cads.api.hotel.dto.RelatorioFaturamentoDto;
-import br.ifs.cads.api.hotel.dto.ReservaDto;
+import br.ifs.cads.api.hotel.dto.*;
 import br.ifs.cads.api.hotel.entity.Reserva;
 import br.ifs.cads.api.hotel.enums.FormaPagamento;
 import br.ifs.cads.api.hotel.enums.StatusReserva;
@@ -39,4 +36,15 @@ public interface ReservaService {
 
     // UC-06: Relatório Financeiro de Faturamento
     RelatorioFaturamentoDto relatorioFaturamento(LocalDate dataInicio, LocalDate dataFim);
+
+    // UC-07: Relatório de Histórico Completo do Hóspede
+    Page<RelatorioHistoricoHospedeDto> relatorioHistoricoHospede(Long hospedeId, Pageable pageable);
+
+    // UC-08: Relatório de Utilização de Categorias
+    List<RelatorioUtilizacaoCategoriaDto> relatorioUtilizacaoCategorias(LocalDate dataInicio, LocalDate dataFim);
+
+    // UC-09: Relatório Gerencial Completo
+    RelatorioGerencialCompletoDto relatorioGerencialCompleto(LocalDate dataInicio,
+                                                             LocalDate dataFim,
+                                                             Pageable pageableCategorias);
 }
